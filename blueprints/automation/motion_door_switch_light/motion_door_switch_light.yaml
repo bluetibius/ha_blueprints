@@ -2,7 +2,7 @@ blueprint:
   name: Light with switch, motion and door contact
   description: Test
   domain: automation
-  source_url: https://github.com/bluetibius/ha_blueprints/blueprints/automation/motion_door_switch_light/motion_door_switch_light.yaml
+  source_url: https://github.com/bluetibius/ha_blueprints/blob/main/blueprints/automation/motion_door_switch_light/motion_door_switch_light.yaml
   input:
     light_target:
       name: Light
