@@ -1,0 +1,186 @@
+blueprint:
+  name: Light with switch, motion and door contact
+  description: Test
+  domain: automation
+  source_url: https://github.com/bluetibius/ha_blueprints/blueprints/automation/motion_door_switch_light/motion_door_switch_light.yaml
+  input:
+    light_target:
+      name: Light
+      selector:
+        target:
+          entity:
+            domain: light
+    light_switch:
+      name: Light Switch
+      description: Light Switch
+      selector:
+        entity:
+          domain: switch
+    motion_entity:
+      name: Motion Sensor
+      description: Motion Sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    door_entity:
+      name: Door Sensor
+      description: Door Sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    no_motion_wait:
+      name: Wait time for motion
+      description: Time to leave the light on after last motion is detected.
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+    door_open_wait:
+      name: Wait time for door open
+      description: Time to leave the light on after door is open
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+    day_level:
+      name: Day light brightness
+      selector:
+        number:
+          min: 0
+          max: 100
+    dark_level:
+      name: Dark light brightness
+      selector:
+        number:
+          min: 0
+          max: 100
+    night_level:
+      name: Night light brightness
+      selector:
+        number:
+          min: 0
+          max: 100
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  light_target: !input light_target
+  light_switch: !input light_switch
+  motion_entity: !input motion_entity
+  door_entity: !input door_entity
+  dark_level: !input dark_level
+  day_level: !input day_level
+  night_level: !input night_level
+
+trigger:
+  - platform: state
+    entity_id: !input light_switch
+    from: "off"
+    to: "on"
+  - platform: state
+    entity_id: !input light_switch
+    from: "on"
+    to: "off"
+  - platform: state
+    entity_id: !input motion_entity
+    from: "off"
+    to: "on"
+  - platform: state
+    entity_id: !input motion_entity
+    from: "on"
+    to: "off"
+    for: !input "no_motion_wait"
+  - platform: state
+    entity_id: !input door_entity
+    from: "off"
+    to: "on"
+    for: !input "door_open_wait"
+
+action:
+  - choose:
+    #Quand on allume l'interrupteur, on allume les lumières
+      - conditions: "{{ trigger.entity_id == light_switch and trigger.from_state.state == 'off' and trigger.to_state.state == 'on' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: input_boolean.mode_nuit
+                    state: "on"
+                sequence:
+                  - service: light.turn_on
+                    data:
+                      transition: 1
+                      brightness_pct: !input night_level
+                    target: !input light_target
+              - conditions:
+                  - condition: state
+                    entity_id: input_boolean.sombre
+                    state: "on"
+                sequence:
+                  - service: light.turn_on
+                    data:
+                      transition: 1
+                      brightness_pct: !input dark_level
+                    target: !input light_target
+            default:
+              - service: light.turn_on
+                data:
+                  transition: 1
+                  brightness_pct: !input day_level
+                target: !input light_target
+      #Quand un mouvement est détecté, on allume les lumières et l'interrupteur
+      - conditions: "{{ trigger.entity_id ==  motion_entity and trigger.from_state.state == 'off' and trigger.to_state.state == 'on' }}"
+        sequence:
+          - service: switch.turn_on
+            entity_id: !input light_switch
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: input_boolean.mode_nuit
+                    state: "on"
+                sequence:
+                  - service: light.turn_on
+                    data:
+                      transition: 1
+                      brightness_pct: !input night_level
+                    target: !input light_target
+              - conditions:
+                  - condition: state
+                    entity_id: input_boolean.sombre
+                    state: "on"
+                sequence:
+                  - service: light.turn_on
+                    data:
+                      transition: 1
+                      brightness_pct: !input dark_level
+                    target: !input light_target
+            default:
+              - service: light.turn_on
+                data:
+                  transition: 1
+                  brightness_pct: !input day_level
+                target: !input light_target
+      #Quand on eteint l'intterupteur, on eteint les lampes
+      - conditions: "{{ trigger.entity_id == light_switch and trigger.from_state.state == 'on' and trigger.to_state.state == 'off' }}"
+        sequence:
+          - service: light.turn_off
+            target: !input light_target
+      #Quand on ouvre la porte, on eteint l'interrupteur et les lampes
+      - conditions: "{{ trigger.entity_id == door_entity and trigger.from_state.state == 'off' and trigger.to_state.state == 'on' }}"
+        sequence:
+          - service: light.turn_off
+            target: !input light_target
+          - service: switch.turn_off
+            entity_id: !input light_switch
+      #Quand on ne détecte plus de mouvement, on eteint tout
+      - conditions: "{{ trigger.entity_id ==  motion_entity and trigger.from_state.state == 'on' and trigger.to_state.state == 'off' }}"
+        sequence:
+          - service: light.turn_off
+            target: !input light_target
+          - service: switch.turn_off
+            entity_id: !input light_switch
